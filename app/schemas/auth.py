@@ -30,6 +30,18 @@ class UserRegister(BaseModel):
     
     
     
+class UserLogin(BaseModel):
+    email : EmailStr
+    password : str = Field(min_length=1, max_length=128)
+    
+    @field_validator("email", mode = "before")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Email must be a string")
+        
+        return value.strip().lower()
+    
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -41,3 +53,8 @@ class UserResponse(BaseModel):
     is_email_verified: bool
     is_active: bool
     created_at: datetime
+    
+    
+class LoginResponse(BaseModel):
+    message: str
+    user: UserResponse

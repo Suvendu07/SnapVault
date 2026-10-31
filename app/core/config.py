@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     APP_NAME : str
     
     DEBUG: bool = False
+    
+    SESSION_EXPIRE_MINUTES : int = 60
+    
+    COOKIE_SECURE : bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
