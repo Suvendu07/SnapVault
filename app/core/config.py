@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     SESSION_EXPIRE_MINUTES : int = 60
     
     COOKIE_SECURE : bool = True
-
+    
+    SMTP_HOST: str
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    SMTP_FROM_EMAIL: str
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

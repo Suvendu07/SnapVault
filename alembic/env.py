@@ -5,7 +5,7 @@ from sqlalchemy import pool
 
 from alembic import context
 from app.db.base import Base
-from app.models import user,user_session
+from app.models import user,user_session, user_token
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides
