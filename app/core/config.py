@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str
     SMTP_PASSWORD: str
     SMTP_FROM_EMAIL: str
+    EMAIL_VERIFICATION_EXPIRE_MINUTES : int = 5
+    FRONTEND_URL : str
     
     model_config = SettingsConfigDict(
         env_file=".env",
