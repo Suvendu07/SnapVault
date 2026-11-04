@@ -58,3 +58,23 @@ class UserResponse(BaseModel):
 class LoginResponse(BaseModel):
     message: str
     user: UserResponse
+    
+    
+    
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=500)
+
+
+class PasswordResetRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=500)
+
+    new_password: str = Field(
+        min_length=12,
+        max_length=128,
+    )
