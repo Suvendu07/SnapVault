@@ -35,7 +35,7 @@ def _invalidate_previous_tokens(db : Session, user_id, purpose : str) -> None:
         previous_token.used_at = now
         
 
-def _create_token(db : Session, user_id, purpose : str, expire_in_mintues : int,) -> str:
+def create_token(db : Session, user_id, purpose : str, expire_in_mintues : int,) -> str:
     
     _invalidate_previous_tokens(db, user_id, purpose,)
     
@@ -56,7 +56,7 @@ def create_verification_email(db : Session, email : str,) -> dict | None:
     if user is None or user.is_email_verified:
         return None
     
-    token = _create_token(db = db, user_id=user.id, purpose="email_verification", expire_in_mintues=(settings.EMAIL_VERIFICATION_EXPIRE_MINUTES),)
+    token = create_token(db = db, user_id=user.id, purpose="email_verification", expire_in_mintues=(settings.EMAIL_VERIFICATION_EXPIRE_MINUTES),)
     
     db.commit()
     
@@ -119,7 +119,7 @@ def create_password_reset_email(
     if user is None or not user.is_active:
         return None
 
-    token = _create_token(
+    token = create_token(
         db=db,
         user_id=user.id,
         purpose="password_reset",

@@ -1,117 +1,115 @@
-from fastapi import APIRouter, Depends, HTTPException, status,Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status,Response, BackgroundTasks, Cookie
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.user import User
-from app.models.user_session import UserSession
 from app.schemas.auth import UserRegister, UserResponse,LoginResponse,UserLogin, EmailRequest, VerifyEmailRequest, PasswordResetRequest
-from app.services.security import hash_password, verify_password
-from app.services.auth import create_user_session, get_valid_session,hash_session_token
 from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.services.acount_service import InvalidTokenError, create_verification_email, verify_email, create_password_reset_email, reset_password
 from app.services.email_service import send_email
-
+from app.services.auth_service import register_user, login_user, logout_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"],)
 
 
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED,)
-def register_user(user : UserRegister, db : Session = Depends(get_db),) -> UserResponse:
-    
-    existing_user = db.scalar(select(User.id).where(User.email == str(user.email)))
-    
-    if existing_user is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists",)
-    
-    hashed_password = hash_password(user.password)
-    
-    users = User(
-        full_name=user.full_name,
-        email=str(user.email),
-        password_hash=hashed_password,
-        role="photographer",
-        is_email_verified=False,
-        is_active=True,
+# REGISTER
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register(
+    data: UserRegister,
+    db: Session = Depends(get_db),
+):
+    user, email_payload = register_user(
+        db=db,
+        full_name=data.full_name,
+        email=data.email,
+        password=data.password,
     )
 
-    # 4. Save the new user.
-    try:
-        db.add(users)
-        db.commit()
-        db.refresh(users)
+    # Send the verification email using your existing email service.
+    # Example: send_email(email_payload)
 
-    except IntegrityError:
-        db.rollback()
-
-        # Handles concurrent requests that try to register
-        # the same email after the initial existence check.
-        existing_user = db.scalar(
-            select(User.id).where(User.email == str(user.email))
-        )
-
-        if existing_user is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email already exists",
-            )
-
-        # Unexpected database constraint violation.
-        raise
-
-    # 5. FastAPI returns only fields declared in UserResponse.
-    return users
-
+    return user
 
 
 # LOGIN
-@router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK,)
-def login_user(data: UserLogin, response : Response, db : Session = Depends(get_db)):
-    
-    user = db.scalar(select(User).where(User.email == str(data.email)))
-    
-    if user is None or not verify_password(data.password, user.password_hash,):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password",)
-    
-    if not user.is_email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email before logging in",
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+)
+def login(
+    data: UserLogin,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    user, raw_token = login_user(
+        db=db,
+        email=data.email,
+        password=data.password,
     )
-    
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your account is inactive",)
-    
-    raw_token, _ = create_user_session(db = db, user_id=user.id,)
-    
-    try:
-        db.commit()
-        
-    except Exception:
-        db.rollback()
-        raise
 
-    
-    response.set_cookie(key="session_token", value = raw_token, max_age=settings.SESSION_EXPIRE_MINUTES * 60,httponly=True, secure=settings.COOKIE_SECURE,samesite="lax",path="/",)
-    
-    return LoginResponse(
-        message="Login successful", user = user,
+    response.set_cookie(
+        key="session_token",
+        value=raw_token,
+        httponly=True,
+        secure=False,  # Set True in production with HTTPS
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
+        path="/",
     )
-    
-    
-    
-@router.post("/logout", status_code = status.HTTP_200_OK)
-def logout_user(response : Response, current_user : User = Depends(get_current_user), db : Session = Depends(get_db), session_token : str = Depends(lambda : None),):
-    
+
     return {
-        "message" : "logout endpoint configuration pending"
+        "message": "Login successful",
+        "user": user,
     }
-    
-    
+
+
+# LOGOUT
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+)
+def logout(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    session_token: str | None = Cookie(
+        default=None,
+        alias="session_token",
+    ),
+):
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session token is missing.",
+        )
+
+    logout_user(
+        db=db,
+        raw_token=session_token,
+        user_id=current_user.id,
+    )
+
+    response.delete_cookie(
+        key="session_token",
+        path="/",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+
+    return {"message": "Logged out successfully"}
+
+
+# GET CURRENT USER
 @router.get(
     "/me",
     response_model=UserResponse,
@@ -123,62 +121,73 @@ def get_me(
 
 
 
-
+# RESEND EMAIL VERIFICATION
 @router.post("/resend-verification")
-def resend_verification(date : EmailRequest, background_tasks : BackgroundTasks, db : Session = Depends(get_db),):
-    
-    email_data = create_verification_email(db = db, email = str(date.email),)
-    
-    if email_data is not None:
-        background_tasks.add_task(send_email,
-                                  recipient=email_data["recipient"],subject=email_data["subject"],body=email_data["body"],)
-        
+def resend_verification(
+    data: EmailRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    email_payload = create_verification_email(
+        db=db,
+        email=str(data.email),
+    )
+
+    if email_payload is not None:
+        background_tasks.add_task(
+            send_email,
+            **email_payload,
+        )
+
     return {
         "message": (
             "If the account exists and needs verification, "
             "a verification email will be sent."
         )
     }
-    
-    
-@router.post("/verify-email")
-def verify_email_route(data : VerifyEmailRequest,db : Session = Depends(get_db),):
-    
-    try:
-        verify_email(db = db, raw_token=data.token,)
-        
-        
-        return {
-            "message" : "Email verified successfully"
-        }
-        
-    except InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
-        )
-        
-        
 
+
+# VERIFY EMAIL
+@router.post("/verify-email")
+def verify_email_route(
+    data: VerifyEmailRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        verify_email(
+            db=db,
+            raw_token=data.token,
+        )
+
+        return {
+            "message": "Email verified successfully"
+        }
+
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+
+# FORGOT PASSWORD
 @router.post("/forgot-password")
 def forgot_password(
     data: EmailRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    email_data = create_password_reset_email(
+    email_payload = create_password_reset_email(
         db=db,
         email=str(data.email),
     )
 
-    if email_data is not None:
+    if email_payload is not None:
         background_tasks.add_task(
             send_email,
-            recipient=email_data["recipient"],
-            subject=email_data["subject"],
-            body=email_data["body"],
+            **email_payload,
         )
 
-    # Same response whether the account exists or not.
     return {
         "message": (
             "If an account exists with this email, "
@@ -187,7 +196,7 @@ def forgot_password(
     }
 
 
-
+# RESET PASSWORD
 @router.post("/reset-password")
 def reset_password_route(
     data: PasswordResetRequest,
@@ -201,14 +210,11 @@ def reset_password_route(
         )
 
         return {
-            "message": (
-                "Password reset successfully. "
-                "Please log in with your new password."
-            )
+            "message": "Password reset successfully"
         }
 
-    except InvalidTokenError as exc:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail="Invalid or expired password reset token",
         )
