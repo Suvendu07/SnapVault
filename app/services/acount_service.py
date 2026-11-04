@@ -86,7 +86,7 @@ def verify_email(db : Session, raw_token : str,) -> User:
     
     now = datetime.now(timezone.utc)
     
-    if token_record is None or token_record.expires_at <= now:
+    if token_record is None or token_record.expire_at <= now:
         raise InvalidTokenError(
             "Invalid or expired verification token"
         )
@@ -123,7 +123,7 @@ def create_password_reset_email(
         db=db,
         user_id=user.id,
         purpose="password_reset",
-        expires_in_minutes=(
+        expire_in_mintues=(
             settings.PASSWORD_RESET_EXPIRE_MINUTES
         ),
     )
@@ -166,7 +166,7 @@ def reset_password(
         )
     )
 
-    if token_record is None or token_record.expires_at <= now:
+    if token_record is None or token_record.expire_at <= now:
         raise InvalidTokenError(
             "Invalid or expired password reset token"
         )
@@ -187,9 +187,9 @@ def reset_password(
         update(UserSession)
         .where(
             UserSession.user_id == user.id,
-            UserSession.revoked_at.is_(None),
+            UserSession.revoke_at.is_(None),
         )
-        .values(revoked_at=now)
+        .values(revoke_at=now)
     )
 
     db.commit()

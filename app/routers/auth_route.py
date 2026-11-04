@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status,Response
+from fastapi import APIRouter, Depends, HTTPException, status,Response, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
 from app.models.user_session import UserSession
-from app.schemas.auth import UserRegister, UserResponse,LoginResponse,UserLogin
+from app.schemas.auth import UserRegister, UserResponse,LoginResponse,UserLogin, EmailRequest, VerifyEmailRequest, PasswordResetRequest
 from app.services.security import hash_password, verify_password
 from app.services.auth import create_user_session, get_valid_session,hash_session_token
 from app.core.config import settings
 from app.core.dependencies import get_current_user
+from app.services.acount_service import InvalidTokenError, create_verification_email, verify_email, create_password_reset_email, reset_password
+from app.services.email_service import send_email
 
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"],)
@@ -75,6 +77,12 @@ def login_user(data: UserLogin, response : Response, db : Session = Depends(get_
     if user is None or not verify_password(data.password, user.password_hash,):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password",)
     
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in",
+    )
+    
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your account is inactive",)
     
@@ -112,3 +120,95 @@ def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+
+
+
+@router.post("/resend-verification")
+def resend_verification(date : EmailRequest, background_tasks : BackgroundTasks, db : Session = Depends(get_db),):
+    
+    email_data = create_verification_email(db = db, email = str(date.email),)
+    
+    if email_data is not None:
+        background_tasks.add_task(send_email,
+                                  recipient=email_data["recipient"],subject=email_data["subject"],body=email_data["body"],)
+        
+    return {
+        "message": (
+            "If the account exists and needs verification, "
+            "a verification email will be sent."
+        )
+    }
+    
+    
+@router.post("/verify-email")
+def verify_email_route(data : VerifyEmailRequest,db : Session = Depends(get_db),):
+    
+    try:
+        verify_email(db = db, raw_token=data.token,)
+        
+        
+        return {
+            "message" : "Email verified successfully"
+        }
+        
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
+        )
+        
+        
+
+@router.post("/forgot-password")
+def forgot_password(
+    data: EmailRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    email_data = create_password_reset_email(
+        db=db,
+        email=str(data.email),
+    )
+
+    if email_data is not None:
+        background_tasks.add_task(
+            send_email,
+            recipient=email_data["recipient"],
+            subject=email_data["subject"],
+            body=email_data["body"],
+        )
+
+    # Same response whether the account exists or not.
+    return {
+        "message": (
+            "If an account exists with this email, "
+            "a password reset link will be sent."
+        )
+    }
+
+
+
+@router.post("/reset-password")
+def reset_password_route(
+    data: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        reset_password(
+            db=db,
+            raw_token=data.token,
+            new_password=data.new_password,
+        )
+
+        return {
+            "message": (
+                "Password reset successfully. "
+                "Please log in with your new password."
+            )
+        }
+
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )

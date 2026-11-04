@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str
     SMTP_PASSWORD: str
     SMTP_FROM_EMAIL: str
-    EMAIL_VERIFICATION_EXPIRE_MINUTES : int = 5
+    
+    PASSWORD_RESET_EXPIRE_MINUTES : int = 15
+    EMAIL_VERIFICATION_EXPIRE_MINUTES : int = 30
     FRONTEND_URL : str
     
     model_config = SettingsConfigDict(
