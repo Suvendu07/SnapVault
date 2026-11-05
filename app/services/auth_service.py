@@ -50,7 +50,7 @@ def register_user(
             db=db,
             user_id=user.id,
             purpose="email_verification",
-            expires_in_minutes=(
+            expire_in_mintues=(
                 settings.EMAIL_VERIFICATION_EXPIRE_MINUTES
             ),
         )
