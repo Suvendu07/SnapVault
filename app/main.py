@@ -7,12 +7,17 @@ from app.db.session import get_db
 from app.models import user,user_session,user_token, photographer_profile
 
 from app.routers.auth_route import router as auth_routers
+from app.routers.photographers_route import router as photographer_route
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG,)
 
 
 
 app.include_router(auth_routers)
+app.include_router(photographer_route)
+
+
+
 
 @app.get("/")
 def root():
@@ -42,5 +47,3 @@ def database_health(db: Session = Depends(get_db)):
             status_code=503,
             detail="Database connection failed",
         )
-        
-
