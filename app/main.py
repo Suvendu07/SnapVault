@@ -8,6 +8,7 @@ from app.models import user,user_session,user_token, photographer_profile, photo
 
 from app.routers.auth_route import router as auth_routers
 from app.routers.photographers_route import router as photographer_route
+from app.routers.photographer_verification import router as photographer_verification_route
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG,)
 
@@ -15,6 +16,7 @@ app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG,)
 
 app.include_router(auth_routers)
 app.include_router(photographer_route)
+app.include_router(photographer_verification_route)
 
 
 
