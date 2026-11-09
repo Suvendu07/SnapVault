@@ -12,7 +12,7 @@ class PhotographerVerification(Base):
     
     __tablename__ = "photographer_verifications"
     
-    __table_args__ = (CheckConstraint("status IN ('pending', 'approved', 'rejected',)",name="ck_photographer_verifications_status"), Index("ix_photographer_verifications_user_id", "user_id",), Index("ix_photographer_verifications_status","status"),)
+    __table_args__ = (CheckConstraint("status IN ('pending', 'approved', 'rejected')",name="ck_photographer_verifications_status"), Index("ix_photographer_verifications_user_id", "user_id",), Index("ix_photographer_verifications_status","status"),)
     
     id : Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,)
     

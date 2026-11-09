@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import user,user_session,user_token, photographer_profile
+from app.models import user,user_session,user_token, photographer_profile, photographer_verification
 
 from app.routers.auth_route import router as auth_routers
 from app.routers.photographers_route import router as photographer_route
